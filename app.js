@@ -29,10 +29,13 @@ const FIELD_ALIASES = {
   agent_name: ['agent_name', 'Agent Name', 'agentName'],
   gate: ['gate', 'Gate'],
   dest: ['destination', 'Destination', 'dest', 'Dest'],
+  quantity: ['quantity', 'Quantity'],
+  gross_weight: ['gross_weight', 'Gross Weight', 'grossWeight'],
+  cbm: ['cbm', 'CBM'],
   chargeable_weight: ['chargeable_weight', 'Chargeable Weight', 'chargeableWeight'],
   selling_rate: ['selling_rate', 'Selling Rate', 'sellingRate'],
-  interline_rate: ['interline_rate', 'Interline Rate', 'interlineRate'],
-  second_leg_rate_cost: ['second_leg_rate_cost', 'Second Leg Rate Cost', 'secondLegRateCost'],
+  interline_cost: ['interline_cost', 'Interline Cost', 'interline_rate', 'Interline Rate', 'interlineRate'],
+  second_leg_cost: ['second_leg_cost', 'Second Leg Cost', 'second_leg_rate_cost', 'Second Leg Rate Cost', 'secondLegRateCost'],
   total_revenue: ['total_revenue', 'Total Revenue', 'totalRevenue'],
   total_cost: ['total_cost', 'Total Cost', 'totalCost'],
   leg1_routing: ['leg1_routing', 'Leg 1 Routing', 'Routing 1', 'Routing Leg 1'],
@@ -44,9 +47,10 @@ const FIELD_ALIASES = {
   leg3_routing: ['leg3_routing', 'Leg 3 Routing', 'Routing 3', 'Routing Leg 3'],
   leg3_flight_number: ['leg3_flight_number', 'Leg 3 Flight Number', 'Flight Number 3', 'Flight Leg 3'],
   leg3_etd: ['leg3_etd', 'Leg 3 ETD', 'ETD 3', 'ETD Leg 3'],
-  last_leg_routing: ['last_leg_routing', 'Last Leg Routing', 'Routing 4', 'Routing Last Leg'],
-  last_leg_flight_number: ['last_leg_flight_number', 'Last Leg Flight Number', 'Flight Number 4', 'Flight Last Leg'],
-  last_leg_etd: ['last_leg_etd', 'Last Leg ETD', 'ETD 4', 'ETD Last Leg'],
+  leg4_routing: ['leg4_routing', 'Leg 4 Routing', 'last_leg_routing', 'Last Leg Routing', 'Routing 4', 'Routing Last Leg'],
+  leg4_flight_number: ['leg4_flight_number', 'Leg 4 Flight Number', 'last_leg_flight_number', 'Last Leg Flight Number', 'Flight Number 4', 'Flight Last Leg'],
+  leg4_etd: ['leg4_etd', 'Leg 4 ETD', 'last_leg_etd', 'Last Leg ETD', 'ETD 4', 'ETD Last Leg'],
+  remark: ['remark', 'Remark'],
 };
 
 const state = {
@@ -299,7 +303,7 @@ function filteredShipments() {
   const query = state.search.toLowerCase();
   return state.shipments.filter((item) => {
     const matchesView = statuses.includes(getField(item, 'status'));
-    const haystack = ['airline', 'mawb', 'agent_name', 'gate', 'dest', 'leg1_routing', 'leg2_routing', 'leg3_routing', 'last_leg_routing'].map((field) => getField(item, field)).join(' ').toLowerCase();
+    const haystack = ['airline', 'mawb', 'agent_name', 'gate', 'dest', 'leg1_routing', 'leg2_routing', 'leg3_routing', 'leg4_routing', 'remark'].map((field) => getField(item, field)).join(' ').toLowerCase();
     return matchesView && (!query || haystack.includes(query));
   });
 }
@@ -307,8 +311,8 @@ function filteredShipments() {
 function renderShipmentRow(item) {
   const id = getShipmentId(item);
   const legs = [1, 2, 3].map((leg) => formatLeg(getField(item, `leg${leg}_routing`), getField(item, `leg${leg}_flight_number`), getField(item, `leg${leg}_etd`))).filter(Boolean);
-  const lastLeg = formatLeg(getField(item, 'last_leg_routing'), getField(item, 'last_leg_flight_number'), getField(item, 'last_leg_etd'));
-  if (lastLeg) legs.push(lastLeg);
+  const leg4 = formatLeg(getField(item, 'leg4_routing'), getField(item, 'leg4_flight_number'), getField(item, 'leg4_etd'));
+  if (leg4) legs.push(leg4);
   return `
     <tr class="align-top transition hover:bg-slate-50">
       <td class="px-4 py-4 font-semibold text-slate-900">${escapeHtml(getField(item, 'airline'))}</td>
@@ -318,9 +322,13 @@ function renderShipmentRow(item) {
       <td class="px-4 py-4 text-slate-700">${escapeHtml(getField(item, 'agent_name'))}</td>
       <td class="px-4 py-4"><span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">${escapeHtml(getField(item, 'gate'))}</span></td>
       <td class="px-4 py-4 font-semibold text-slate-700">${escapeHtml(getField(item, 'dest'))}</td>
+      <td class="px-4 py-4 text-right text-slate-700">${formatNumber(getField(item, 'quantity'))}</td>
+      <td class="px-4 py-4 text-right text-slate-700">${formatNumber(getField(item, 'gross_weight'))}</td>
+      <td class="px-4 py-4 text-right text-slate-700">${formatNumber(getField(item, 'cbm'))}</td>
       <td class="px-4 py-4 text-xs text-slate-600">${legs.length ? legs.join('<br>') : '-'}</td>
       <td class="px-4 py-4 text-right font-semibold text-emerald-700">${formatCurrency(getField(item, 'total_revenue'))}</td>
       <td class="px-4 py-4 text-right font-semibold text-rose-700">${formatCurrency(getField(item, 'total_cost'))}</td>
+      <td class="px-4 py-4 text-xs text-slate-600">${escapeHtml(getField(item, 'remark'))}</td>
     </tr>`;
 }
 
@@ -343,6 +351,11 @@ function formatDate(value) {
 
 function formatCurrency(value) {
   return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined || value === '') return '-';
+  return Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
 function escapeHtml(value = '') {
@@ -370,10 +383,10 @@ function calculateTotals() {
   const formData = new FormData(elements.form);
   const chargeableWeight = Number(formData.get('chargeable_weight') || 0);
   const sellingRate = Number(formData.get('selling_rate') || 0);
-  const interlineRate = Number(formData.get('interline_rate') || 0);
-  const secondLegRateCost = Number(formData.get('second_leg_rate_cost') || 0);
+  const interlineCost = Number(formData.get('interline_cost') || 0);
+  const secondLegCost = Number(formData.get('second_leg_cost') || 0);
   const totalRevenue = chargeableWeight * sellingRate;
-  const totalCost = interlineRate + secondLegRateCost;
+  const totalCost = interlineCost + secondLegCost;
   elements.totalRevenue.textContent = formatCurrency(totalRevenue);
   elements.totalCost.textContent = formatCurrency(totalCost);
   return { totalRevenue, totalCost };
@@ -390,10 +403,13 @@ function formPayload() {
   setField(payload, 'agent_name', formData.get('agent_name'));
   setField(payload, 'gate', formData.get('gate'));
   setField(payload, 'dest', formData.get('dest'));
+  setField(payload, 'quantity', Number(formData.get('quantity') || 0));
+  setField(payload, 'gross_weight', Number(formData.get('gross_weight') || 0));
+  setField(payload, 'cbm', Number(formData.get('cbm') || 0));
   setField(payload, 'chargeable_weight', Number(formData.get('chargeable_weight') || 0));
   setField(payload, 'selling_rate', Number(formData.get('selling_rate') || 0));
-  setField(payload, 'interline_rate', Number(formData.get('interline_rate') || 0));
-  setField(payload, 'second_leg_rate_cost', Number(formData.get('second_leg_rate_cost') || 0));
+  setField(payload, 'interline_cost', Number(formData.get('interline_cost') || 0));
+  setField(payload, 'second_leg_cost', Number(formData.get('second_leg_cost') || 0));
   setField(payload, 'total_revenue', totalRevenue);
   setField(payload, 'total_cost', totalCost);
   setField(payload, 'leg1_routing', formData.get('leg1_routing'));
@@ -405,9 +421,10 @@ function formPayload() {
   setField(payload, 'leg3_routing', formData.get('leg3_routing'));
   setField(payload, 'leg3_flight_number', formData.get('leg3_flight_number'));
   setField(payload, 'leg3_etd', formData.get('leg3_etd') || null);
-  setField(payload, 'last_leg_routing', formData.get('last_leg_routing'));
-  setField(payload, 'last_leg_flight_number', formData.get('last_leg_flight_number'));
-  setField(payload, 'last_leg_etd', formData.get('last_leg_etd') || null);
+  setField(payload, 'leg4_routing', formData.get('leg4_routing'));
+  setField(payload, 'leg4_flight_number', formData.get('leg4_flight_number'));
+  setField(payload, 'leg4_etd', formData.get('leg4_etd') || null);
+  setField(payload, 'remark', formData.get('remark'));
   return payload;
 }
 

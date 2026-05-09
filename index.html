@@ -84,10 +84,14 @@
                     <th class="px-4 py-3">MAWB</th>
                     <th class="px-4 py-3">Agent</th>
                     <th class="px-4 py-3">Gate</th>
-                    <th class="px-4 py-3">Dest</th>
+                    <th class="px-4 py-3">Destination</th>
+                    <th class="px-4 py-3 text-right">Qty</th>
+                    <th class="px-4 py-3 text-right">GW</th>
+                    <th class="px-4 py-3 text-right">CBM</th>
                     <th class="px-4 py-3">Flight Legs</th>
                     <th class="px-4 py-3 text-right">Revenue</th>
                     <th class="px-4 py-3 text-right">Cost</th>
+                    <th class="px-4 py-3">Remark</th>
                   </tr>
                 </thead>
                 <tbody id="shipments-table" class="divide-y divide-slate-100 bg-white"></tbody>
@@ -150,21 +154,33 @@
               <label class="block text-sm font-medium text-slate-700">Destination
                 <input name="dest" required placeholder="Final destination" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
               </label>
+              <label class="block text-sm font-medium text-slate-700 sm:col-span-2">Remark
+                <textarea name="remark" rows="3" placeholder="Optional booking notes" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"></textarea>
+              </label>
             </div>
 
             <h3 class="pt-4 text-sm font-bold uppercase tracking-widest text-slate-500">Commercial Detail</h3>
             <div class="grid gap-4 sm:grid-cols-2">
+              <label class="block text-sm font-medium text-slate-700">Quantity
+                <input name="quantity" type="number" min="0" step="1" value="0" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+              <label class="block text-sm font-medium text-slate-700">Gross Weight
+                <input name="gross_weight" type="number" min="0" step="0.01" value="0" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+              <label class="block text-sm font-medium text-slate-700">CBM
+                <input name="cbm" type="number" min="0" step="0.001" value="0" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
               <label class="block text-sm font-medium text-slate-700">Chargeable Weight
                 <input name="chargeable_weight" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
               </label>
               <label class="block text-sm font-medium text-slate-700">Selling Rate
                 <input name="selling_rate" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
               </label>
-              <label class="block text-sm font-medium text-slate-700">Interline Rate
-                <input name="interline_rate" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              <label class="block text-sm font-medium text-slate-700">Interline Cost
+                <input name="interline_cost" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
               </label>
-              <label class="block text-sm font-medium text-slate-700">Second Leg Rate Cost
-                <input name="second_leg_rate_cost" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              <label class="block text-sm font-medium text-slate-700">Second Leg Cost
+                <input name="second_leg_cost" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
               </label>
             </div>
             <div class="grid gap-4 rounded-2xl bg-slate-50 p-4 sm:grid-cols-2">
@@ -228,16 +244,16 @@
               </div>
 
               <div class="rounded-2xl border border-slate-200 p-4">
-                <p class="mb-3 font-semibold text-slate-800">Last Leg</p>
+                <p class="mb-3 font-semibold text-slate-800">Leg 4</p>
                 <div class="grid gap-3 sm:grid-cols-3">
                   <label class="text-sm font-medium text-slate-700">Routing
-                    <input name="last_leg_routing" placeholder="Manual routing" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                    <input name="leg4_routing" placeholder="Manual routing" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
                   </label>
                   <label class="text-sm font-medium text-slate-700">Flight Number
-                    <select name="last_leg_flight_number" class="flight-select form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="">Select</option></select>
+                    <select name="leg4_flight_number" class="flight-select form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="">Select</option></select>
                   </label>
                   <label class="text-sm font-medium text-slate-700">ETD
-                    <input name="last_leg_etd" type="date" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                    <input name="leg4_etd" type="date" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
                   </label>
                 </div>
               </div>

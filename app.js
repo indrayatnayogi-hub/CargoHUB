@@ -113,7 +113,27 @@ function sortShipmentsByBookingDate(shipments) {
 }
 
 function formatSupabaseError(error) {
-  return [error.message, error.details, error.hint].filter(Boolean).join(' | ');
+  return [error.code, error.message, error.details, error.hint].filter(Boolean).join(' | ');
+}
+
+function tableErrorMessage(table, action, error) {
+  const details = formatSupabaseError(error);
+  const checklist = [
+    `tabel ${table} ada di schema public`,
+    `nama tabel persis ${table} (huruf besar/kecil berpengaruh)`,
+    'schema public masuk API exposed schemas',
+    'RLS policy SELECT/INSERT/UPDATE untuk role anon tidak error',
+  ].join('; ');
+  return `Supabase gagal ${action} ${table}: ${details}. Cek di Supabase: ${checklist}.`;
+}
+
+function logSupabaseError(table, action, error) {
+  console.error(`Supabase ${action} failed for ${table}`, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
 }
 
 function getConfig() {
@@ -134,35 +154,43 @@ function initSupabase() {
 }
 
 function showMessage(text, type = 'success') {
-  elements.message.className = `mt-5 rounded-2xl p-4 text-sm ${type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`;
+  elements.message.className = `mt-5 rounded-2xl whitespace-pre-wrap p-4 text-sm ${type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`;
   elements.message.textContent = text;
   elements.message.classList.remove('hidden');
-  window.setTimeout(() => elements.message.classList.add('hidden'), 4000);
+  if (type !== 'error') {
+    window.setTimeout(() => elements.message.classList.add('hidden'), 4000);
+  }
 }
 
 async function fetchTable(table, columns = '*') {
   if (!state.supabase) return [];
   const { data, error } = await state.supabase.from(table).select(columns);
-  if (error) throw error;
+  if (error) {
+    logSupabaseError(table, 'select', error);
+    throw error;
+  }
   return data || [];
 }
 
-async function loadReferenceData() {
+async function fetchOptionalTable(table, fallback = []) {
   try {
-    const [routings, flights, agents] = await Promise.all([
-      fetchTable('master_routings'),
-      fetchTable('master_flights'),
-      fetchTable('cargo_shipments'),
-    ]);
-    state.routings = routings.length ? routings : FALLBACK_ROUTINGS;
-    state.flights = flights.length ? flights : FALLBACK_FLIGHTS.map((flight_number) => ({ flight_number }));
-    detectFieldKeys(agents);
-    state.agents = [...new Set(agents.map((item) => getField(item, 'agent_name')).filter(Boolean))].sort();
+    return await fetchTable(table);
   } catch (error) {
-    console.warn('Using fallback reference data:', error.message);
-    state.routings = FALLBACK_ROUTINGS;
-    state.flights = FALLBACK_FLIGHTS.map((flight_number) => ({ flight_number }));
+    console.warn(tableErrorMessage(table, 'load reference data from', error));
+    return fallback;
   }
+}
+
+async function loadReferenceData() {
+  const [routings, flights, agents] = await Promise.all([
+    fetchOptionalTable('master_routings', FALLBACK_ROUTINGS),
+    fetchOptionalTable('master_flights', FALLBACK_FLIGHTS.map((flight_number) => ({ flight_number }))),
+    fetchOptionalTable('cargo_shipments', []),
+  ]);
+  state.routings = routings.length ? routings : FALLBACK_ROUTINGS;
+  state.flights = flights.length ? flights : FALLBACK_FLIGHTS.map((flight_number) => ({ flight_number }));
+  detectFieldKeys(agents);
+  state.agents = [...new Set(agents.map((item) => getField(item, 'agent_name')).filter(Boolean))].sort();
   renderRoutingOptions();
   renderFlightOptions();
   renderAgentSuggestions();
@@ -183,7 +211,7 @@ async function loadShipments() {
     renderAgentSuggestions();
     render();
   } catch (error) {
-    showMessage(`Gagal memuat data: ${formatSupabaseError(error)}`, 'error');
+    showMessage(tableErrorMessage('cargo_shipments', 'load data from', error), 'error');
   }
 }
 
@@ -328,7 +356,8 @@ async function updateStatus(id, status) {
   const statusKey = Object.prototype.hasOwnProperty.call(shipment, 'Status') ? 'Status' : 'status';
   const { error } = await state.supabase.from('cargo_shipments').update({ [statusKey]: status }).eq(key, shipment[key]);
   if (error) {
-    showMessage(`Gagal update status: ${formatSupabaseError(error)}`, 'error');
+    logSupabaseError('cargo_shipments', 'update', error);
+    showMessage(tableErrorMessage('cargo_shipments', 'update status in', error), 'error');
     render();
     return;
   }
@@ -391,7 +420,8 @@ async function handleSubmit(event) {
   const payload = formPayload();
   const { data, error } = await state.supabase.from('cargo_shipments').insert(payload).select().single();
   if (error) {
-    showMessage(`Gagal menyimpan booking: ${formatSupabaseError(error)}`, 'error');
+    logSupabaseError('cargo_shipments', 'insert', error);
+    showMessage(tableErrorMessage('cargo_shipments', 'save booking into', error), 'error');
     return;
   }
   state.shipments.unshift(data);

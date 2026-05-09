@@ -28,7 +28,7 @@ const FIELD_ALIASES = {
   mawb: ['mawb', 'MAWB'],
   agent_name: ['agent_name', 'Agent Name', 'agentName'],
   gate: ['gate', 'Gate'],
-  dest: ['dest', 'Dest', 'destination', 'Destination'],
+  dest: ['destination', 'Destination', 'dest', 'Dest'],
   chargeable_weight: ['chargeable_weight', 'Chargeable Weight', 'chargeableWeight'],
   selling_rate: ['selling_rate', 'Selling Rate', 'sellingRate'],
   interline_rate: ['interline_rate', 'Interline Rate', 'interlineRate'],

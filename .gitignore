@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Local environment variables and generated config
+.env
+.env.*
+!.env.example
+config.js
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/

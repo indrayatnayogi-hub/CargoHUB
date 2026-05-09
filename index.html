@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CargoHUB | Airfreight Booking Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                600: '#2563eb',
+                700: '#1d4ed8',
+                900: '#1e3a8a',
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="min-h-screen bg-slate-100 text-slate-900">
+    <div class="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <header class="mb-6 overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-brand-900 to-brand-700 p-6 text-white shadow-xl">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-[0.35em] text-blue-200">CargoHUB</p>
+            <h1 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Airfreight Booking Monitoring</h1>
+            <p class="mt-3 max-w-2xl text-sm leading-6 text-blue-100">
+              Pantau booking, shipment export yang sedang berjalan, dan pembatalan dalam satu dashboard Supabase realtime-ready.
+            </p>
+          </div>
+          <button id="open-booking-modal" class="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-brand-700 shadow-lg transition hover:bg-blue-50 focus:outline-none focus:ring-4 focus:ring-white/30">
+            + New Booking
+          </button>
+        </div>
+      </header>
+
+      <main class="flex-1 space-y-6">
+        <section class="grid gap-4 md:grid-cols-3" aria-label="Shipment status summary">
+          <article class="rounded-2xl border border-white bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Active Bookings</p>
+            <p id="stat-active" class="mt-2 text-3xl font-bold text-slate-950">0</p>
+          </article>
+          <article class="rounded-2xl border border-white bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Cargo Monitoring</p>
+            <p id="stat-utilized" class="mt-2 text-3xl font-bold text-slate-950">0</p>
+          </article>
+          <article class="rounded-2xl border border-white bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-slate-500">Cancelled</p>
+            <p id="stat-cancelled" class="mt-2 text-3xl font-bold text-slate-950">0</p>
+          </article>
+        </section>
+
+        <section class="rounded-3xl bg-white p-4 shadow-sm sm:p-6">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <nav class="grid gap-2 rounded-2xl bg-slate-100 p-2 sm:grid-cols-3" aria-label="CargoHUB views">
+              <button class="view-tab rounded-xl px-4 py-3 text-sm font-semibold transition" data-view="booking">Booking List</button>
+              <button class="view-tab rounded-xl px-4 py-3 text-sm font-semibold transition" data-view="monitoring">Cargo Monitoring</button>
+              <button class="view-tab rounded-xl px-4 py-3 text-sm font-semibold transition" data-view="cancelled">Cargo Cancelled</button>
+            </nav>
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <label for="search-input" class="sr-only">Search shipments</label>
+              <input id="search-input" type="search" placeholder="Search MAWB, agent, routing..." class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-brand-600 focus:ring-4 focus:ring-blue-100 sm:w-80" />
+              <button id="refresh-data" class="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-brand-600 hover:text-brand-700">Refresh</button>
+            </div>
+          </div>
+
+          <div id="config-warning" class="mt-5 hidden rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"></div>
+          <div id="app-message" class="mt-5 hidden rounded-2xl p-4 text-sm"></div>
+
+          <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th class="px-4 py-3">Airline</th>
+                    <th class="px-4 py-3">Booking Date</th>
+                    <th class="px-4 py-3">Status</th>
+                    <th class="px-4 py-3">MAWB</th>
+                    <th class="px-4 py-3">Agent</th>
+                    <th class="px-4 py-3">Gate</th>
+                    <th class="px-4 py-3">Dest</th>
+                    <th class="px-4 py-3">Flight Legs</th>
+                    <th class="px-4 py-3 text-right">Revenue</th>
+                    <th class="px-4 py-3 text-right">Cost</th>
+                  </tr>
+                </thead>
+                <tbody id="shipments-table" class="divide-y divide-slate-100 bg-white"></tbody>
+              </table>
+            </div>
+            <div id="empty-state" class="hidden px-6 py-16 text-center">
+              <p class="text-lg font-semibold text-slate-800">No active bookings</p>
+              <p class="mt-2 text-sm text-slate-500">Klik “New Booking” untuk membuat data booking baru.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="booking-modal" class="fixed inset-0 z-50 hidden items-start justify-center overflow-y-auto bg-slate-950/60 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
+      <form id="booking-form" class="w-full max-w-5xl rounded-3xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between border-b border-slate-200 p-6">
+          <div>
+            <h2 id="booking-modal-title" class="text-2xl font-bold text-slate-950">Create Airfreight Booking</h2>
+            <p class="mt-1 text-sm text-slate-500">Lengkapi data booking dan flight leg. Perhitungan biaya berjalan otomatis.</p>
+          </div>
+          <button type="button" id="close-booking-modal" class="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" aria-label="Close modal">✕</button>
+        </div>
+
+        <div class="grid gap-6 p-6 lg:grid-cols-2">
+          <section class="space-y-4">
+            <h3 class="text-sm font-bold uppercase tracking-widest text-slate-500">Shipment Detail</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <label class="block text-sm font-medium text-slate-700">Airline
+                <select name="airline" required class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5">
+                  <option value="">Select airline</option>
+                  <option>Aeromexico</option>
+                  <option>Avianca</option>
+                </select>
+              </label>
+              <label class="block text-sm font-medium text-slate-700">Booking Date
+                <input name="booking_date" type="date" required class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+              <label class="block text-sm font-medium text-slate-700">Status
+                <select name="status" required class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5">
+                  <option>Booking</option>
+                  <option>Space confirm</option>
+                  <option>Utilized</option>
+                  <option>Cancelled</option>
+                </select>
+              </label>
+              <label class="block text-sm font-medium text-slate-700">MAWB
+                <input name="mawb" required placeholder="e.g. 123-45678901" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+              <label class="relative block text-sm font-medium text-slate-700">Agent Name
+                <input id="agent-name" name="agent_name" required autocomplete="off" list="agent-suggestions" placeholder="Start typing agent..." class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                <datalist id="agent-suggestions"></datalist>
+              </label>
+              <label class="block text-sm font-medium text-slate-700">Gate
+                <select name="gate" required class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5">
+                  <option value="">Select gate</option>
+                  <option>NRT</option><option>ICN</option><option>MAD</option><option>BCN</option><option>LHR</option><option>CDG</option>
+                </select>
+              </label>
+              <label class="block text-sm font-medium text-slate-700">Destination
+                <input name="dest" required placeholder="Final destination" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+            </div>
+
+            <h3 class="pt-4 text-sm font-bold uppercase tracking-widest text-slate-500">Commercial Detail</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <label class="block text-sm font-medium text-slate-700">Chargeable Weight
+                <input name="chargeable_weight" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+              <label class="block text-sm font-medium text-slate-700">Selling Rate
+                <input name="selling_rate" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+              <label class="block text-sm font-medium text-slate-700">Interline Rate
+                <input name="interline_rate" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+              <label class="block text-sm font-medium text-slate-700">Second Leg Rate Cost
+                <input name="second_leg_rate_cost" type="number" min="0" step="0.01" value="0" class="calc-field form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+              </label>
+            </div>
+            <div class="grid gap-4 rounded-2xl bg-slate-50 p-4 sm:grid-cols-2">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Total Revenue</p>
+                <p id="total-revenue" class="mt-1 text-2xl font-bold text-emerald-600">0.00</p>
+              </div>
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Total Cost</p>
+                <p id="total-cost" class="mt-1 text-2xl font-bold text-rose-600">0.00</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-4">
+            <h3 class="text-sm font-bold uppercase tracking-widest text-slate-500">Flight Legs</h3>
+            <div class="space-y-4">
+              <div class="rounded-2xl border border-slate-200 p-4">
+                <p class="mb-3 font-semibold text-slate-800">Leg 1</p>
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <label class="text-sm font-medium text-slate-700">Routing
+                    <select id="leg1-routing" name="leg1_routing" required class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="">Select</option></select>
+                  </label>
+                  <label class="text-sm font-medium text-slate-700">Flight Number
+                    <select name="leg1_flight_number" class="flight-select form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="">Select</option></select>
+                  </label>
+                  <label class="text-sm font-medium text-slate-700">ETD
+                    <input name="leg1_etd" type="date" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 p-4">
+                <p class="mb-3 font-semibold text-slate-800">Leg 2</p>
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <label class="text-sm font-medium text-slate-700">Routing
+                    <select id="leg2-routing" name="leg2_routing" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="">Select Leg 1 first</option></select>
+                  </label>
+                  <label class="text-sm font-medium text-slate-700">Flight Number
+                    <select name="leg2_flight_number" class="flight-select form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="">Select</option></select>
+                  </label>
+                  <label class="text-sm font-medium text-slate-700">ETD
+                    <input name="leg2_etd" type="date" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 p-4">
+                <p class="mb-3 font-semibold text-slate-800">Leg 3</p>
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <label class="text-sm font-medium text-slate-700">Routing
+                    <input name="leg3_routing" placeholder="Manual routing" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                  </label>
+                  <label class="text-sm font-medium text-slate-700">Flight Number
+                    <select name="leg3_flight_number" class="flight-select form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="">Select</option></select>
+                  </label>
+                  <label class="text-sm font-medium text-slate-700">ETD
+                    <input name="leg3_etd" type="date" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 p-4">
+                <p class="mb-3 font-semibold text-slate-800">Last Leg</p>
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <label class="text-sm font-medium text-slate-700">Routing
+                    <input name="last_leg_routing" placeholder="Manual routing" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                  </label>
+                  <label class="text-sm font-medium text-slate-700">Flight Number
+                    <select name="last_leg_flight_number" class="flight-select form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option value="">Select</option></select>
+                  </label>
+                  <label class="text-sm font-medium text-slate-700">ETD
+                    <input name="last_leg_etd" type="date" class="form-field mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="flex flex-col-reverse gap-3 border-t border-slate-200 p-6 sm:flex-row sm:justify-end">
+          <button type="button" id="cancel-booking" class="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="rounded-2xl bg-brand-700 px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-brand-600 focus:outline-none focus:ring-4 focus:ring-blue-100">Save Booking</button>
+        </div>
+      </form>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

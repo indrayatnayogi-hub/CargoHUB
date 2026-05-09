@@ -21,6 +21,34 @@ const FALLBACK_ROUTINGS = [
 ];
 const FALLBACK_FLIGHTS = ['CX780', 'CX520', 'EY475', 'EY101', 'QR955', 'QR137', 'TK57', 'TK1981'];
 
+const FIELD_ALIASES = {
+  airline: ['airline', 'Airline'],
+  booking_date: ['booking_date', 'Booking Date', 'bookingDate'],
+  status: ['status', 'Status'],
+  mawb: ['mawb', 'MAWB'],
+  agent_name: ['agent_name', 'Agent Name', 'agentName'],
+  gate: ['gate', 'Gate'],
+  dest: ['dest', 'Dest', 'destination', 'Destination'],
+  chargeable_weight: ['chargeable_weight', 'Chargeable Weight', 'chargeableWeight'],
+  selling_rate: ['selling_rate', 'Selling Rate', 'sellingRate'],
+  interline_rate: ['interline_rate', 'Interline Rate', 'interlineRate'],
+  second_leg_rate_cost: ['second_leg_rate_cost', 'Second Leg Rate Cost', 'secondLegRateCost'],
+  total_revenue: ['total_revenue', 'Total Revenue', 'totalRevenue'],
+  total_cost: ['total_cost', 'Total Cost', 'totalCost'],
+  leg1_routing: ['leg1_routing', 'Leg 1 Routing', 'Routing 1', 'Routing Leg 1'],
+  leg1_flight_number: ['leg1_flight_number', 'Leg 1 Flight Number', 'Flight Number 1', 'Flight Leg 1'],
+  leg1_etd: ['leg1_etd', 'Leg 1 ETD', 'ETD 1', 'ETD Leg 1'],
+  leg2_routing: ['leg2_routing', 'Leg 2 Routing', 'Routing 2', 'Routing Leg 2'],
+  leg2_flight_number: ['leg2_flight_number', 'Leg 2 Flight Number', 'Flight Number 2', 'Flight Leg 2'],
+  leg2_etd: ['leg2_etd', 'Leg 2 ETD', 'ETD 2', 'ETD Leg 2'],
+  leg3_routing: ['leg3_routing', 'Leg 3 Routing', 'Routing 3', 'Routing Leg 3'],
+  leg3_flight_number: ['leg3_flight_number', 'Leg 3 Flight Number', 'Flight Number 3', 'Flight Leg 3'],
+  leg3_etd: ['leg3_etd', 'Leg 3 ETD', 'ETD 3', 'ETD Leg 3'],
+  last_leg_routing: ['last_leg_routing', 'Last Leg Routing', 'Routing 4', 'Routing Last Leg'],
+  last_leg_flight_number: ['last_leg_flight_number', 'Last Leg Flight Number', 'Flight Number 4', 'Flight Last Leg'],
+  last_leg_etd: ['last_leg_etd', 'Last Leg ETD', 'ETD 4', 'ETD Last Leg'],
+};
+
 const state = {
   currentView: 'booking',
   shipments: [],
@@ -29,6 +57,7 @@ const state = {
   agents: [],
   supabase: null,
   search: '',
+  fieldKeys: {},
 };
 
 const elements = {
@@ -53,6 +82,39 @@ const elements = {
   statUtilized: document.querySelector('#stat-utilized'),
   statCancelled: document.querySelector('#stat-cancelled'),
 };
+
+
+function getField(item, field) {
+  const aliases = FIELD_ALIASES[field] || [field];
+  const key = aliases.find((alias) => Object.prototype.hasOwnProperty.call(item, alias));
+  return key ? item[key] : '';
+}
+
+function setField(payload, field, value) {
+  payload[state.fieldKeys[field] || FIELD_ALIASES[field][0]] = value;
+}
+
+function detectFieldKeys(rows) {
+  rows.forEach((row) => {
+    Object.entries(FIELD_ALIASES).forEach(([field, aliases]) => {
+      if (state.fieldKeys[field]) return;
+      const key = aliases.find((alias) => Object.prototype.hasOwnProperty.call(row, alias));
+      if (key) state.fieldKeys[field] = key;
+    });
+  });
+}
+
+function getShipmentId(item) {
+  return item.id || getField(item, 'mawb');
+}
+
+function sortShipmentsByBookingDate(shipments) {
+  return [...shipments].sort((a, b) => new Date(getField(b, 'booking_date') || 0) - new Date(getField(a, 'booking_date') || 0));
+}
+
+function formatSupabaseError(error) {
+  return [error.message, error.details, error.hint].filter(Boolean).join(' | ');
+}
 
 function getConfig() {
   return window.CARGOHUB_CONFIG || {
@@ -90,11 +152,12 @@ async function loadReferenceData() {
     const [routings, flights, agents] = await Promise.all([
       fetchTable('master_routings'),
       fetchTable('master_flights'),
-      fetchTable('cargo_shipments', 'agent_name'),
+      fetchTable('cargo_shipments'),
     ]);
     state.routings = routings.length ? routings : FALLBACK_ROUTINGS;
     state.flights = flights.length ? flights : FALLBACK_FLIGHTS.map((flight_number) => ({ flight_number }));
-    state.agents = [...new Set(agents.map((item) => item.agent_name).filter(Boolean))].sort();
+    detectFieldKeys(agents);
+    state.agents = [...new Set(agents.map((item) => getField(item, 'agent_name')).filter(Boolean))].sort();
   } catch (error) {
     console.warn('Using fallback reference data:', error.message);
     state.routings = FALLBACK_ROUTINGS;
@@ -112,14 +175,15 @@ async function loadShipments() {
     return;
   }
   try {
-    const { data, error } = await state.supabase.from('cargo_shipments').select('*').order('booking_date', { ascending: false });
+    const { data, error } = await state.supabase.from('cargo_shipments').select('*');
     if (error) throw error;
-    state.shipments = data || [];
-    state.agents = [...new Set(state.shipments.map((item) => item.agent_name).filter(Boolean))].sort();
+    state.shipments = sortShipmentsByBookingDate(data || []);
+    detectFieldKeys(state.shipments);
+    state.agents = [...new Set(state.shipments.map((item) => getField(item, 'agent_name')).filter(Boolean))].sort();
     renderAgentSuggestions();
     render();
   } catch (error) {
-    showMessage(`Gagal memuat data: ${error.message}`, 'error');
+    showMessage(`Gagal memuat data: ${formatSupabaseError(error)}`, 'error');
   }
 }
 
@@ -197,38 +261,38 @@ function renderTabs() {
 }
 
 function renderStats() {
-  elements.statActive.textContent = state.shipments.filter((item) => VIEW_FILTERS.booking.includes(item.status)).length;
-  elements.statUtilized.textContent = state.shipments.filter((item) => VIEW_FILTERS.monitoring.includes(item.status)).length;
-  elements.statCancelled.textContent = state.shipments.filter((item) => VIEW_FILTERS.cancelled.includes(item.status)).length;
+  elements.statActive.textContent = state.shipments.filter((item) => VIEW_FILTERS.booking.includes(getField(item, 'status'))).length;
+  elements.statUtilized.textContent = state.shipments.filter((item) => VIEW_FILTERS.monitoring.includes(getField(item, 'status'))).length;
+  elements.statCancelled.textContent = state.shipments.filter((item) => VIEW_FILTERS.cancelled.includes(getField(item, 'status'))).length;
 }
 
 function filteredShipments() {
   const statuses = VIEW_FILTERS[state.currentView];
   const query = state.search.toLowerCase();
   return state.shipments.filter((item) => {
-    const matchesView = statuses.includes(item.status);
-    const haystack = [item.airline, item.mawb, item.agent_name, item.gate, item.dest, item.leg1_routing, item.leg2_routing, item.leg3_routing, item.last_leg_routing].join(' ').toLowerCase();
+    const matchesView = statuses.includes(getField(item, 'status'));
+    const haystack = ['airline', 'mawb', 'agent_name', 'gate', 'dest', 'leg1_routing', 'leg2_routing', 'leg3_routing', 'last_leg_routing'].map((field) => getField(item, field)).join(' ').toLowerCase();
     return matchesView && (!query || haystack.includes(query));
   });
 }
 
 function renderShipmentRow(item) {
-  const id = item.id || item.mawb;
-  const legs = [1, 2, 3].map((leg) => formatLeg(item[`leg${leg}_routing`], item[`leg${leg}_flight_number`], item[`leg${leg}_etd`])).filter(Boolean);
-  const lastLeg = formatLeg(item.last_leg_routing, item.last_leg_flight_number, item.last_leg_etd);
+  const id = getShipmentId(item);
+  const legs = [1, 2, 3].map((leg) => formatLeg(getField(item, `leg${leg}_routing`), getField(item, `leg${leg}_flight_number`), getField(item, `leg${leg}_etd`))).filter(Boolean);
+  const lastLeg = formatLeg(getField(item, 'last_leg_routing'), getField(item, 'last_leg_flight_number'), getField(item, 'last_leg_etd'));
   if (lastLeg) legs.push(lastLeg);
   return `
     <tr class="align-top transition hover:bg-slate-50">
-      <td class="px-4 py-4 font-semibold text-slate-900">${escapeHtml(item.airline)}</td>
-      <td class="px-4 py-4 whitespace-nowrap text-slate-600">${formatDate(item.booking_date)}</td>
-      <td class="px-4 py-4">${renderStatusSelect(id, item.status)}</td>
-      <td class="px-4 py-4 font-mono text-xs text-slate-700">${escapeHtml(item.mawb)}</td>
-      <td class="px-4 py-4 text-slate-700">${escapeHtml(item.agent_name)}</td>
-      <td class="px-4 py-4"><span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">${escapeHtml(item.gate)}</span></td>
-      <td class="px-4 py-4 font-semibold text-slate-700">${escapeHtml(item.dest)}</td>
+      <td class="px-4 py-4 font-semibold text-slate-900">${escapeHtml(getField(item, 'airline'))}</td>
+      <td class="px-4 py-4 whitespace-nowrap text-slate-600">${formatDate(getField(item, 'booking_date'))}</td>
+      <td class="px-4 py-4">${renderStatusSelect(id, getField(item, 'status'))}</td>
+      <td class="px-4 py-4 font-mono text-xs text-slate-700">${escapeHtml(getField(item, 'mawb'))}</td>
+      <td class="px-4 py-4 text-slate-700">${escapeHtml(getField(item, 'agent_name'))}</td>
+      <td class="px-4 py-4"><span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">${escapeHtml(getField(item, 'gate'))}</span></td>
+      <td class="px-4 py-4 font-semibold text-slate-700">${escapeHtml(getField(item, 'dest'))}</td>
       <td class="px-4 py-4 text-xs text-slate-600">${legs.length ? legs.join('<br>') : '-'}</td>
-      <td class="px-4 py-4 text-right font-semibold text-emerald-700">${formatCurrency(item.total_revenue)}</td>
-      <td class="px-4 py-4 text-right font-semibold text-rose-700">${formatCurrency(item.total_cost)}</td>
+      <td class="px-4 py-4 text-right font-semibold text-emerald-700">${formatCurrency(getField(item, 'total_revenue'))}</td>
+      <td class="px-4 py-4 text-right font-semibold text-rose-700">${formatCurrency(getField(item, 'total_cost'))}</td>
     </tr>`;
 }
 
@@ -258,17 +322,18 @@ function escapeHtml(value = '') {
 }
 
 async function updateStatus(id, status) {
-  const shipment = state.shipments.find((item) => String(item.id || item.mawb) === String(id));
+  const shipment = state.shipments.find((item) => String(getShipmentId(item)) === String(id));
   if (!shipment || !state.supabase) return;
-  const key = shipment.id ? 'id' : 'mawb';
-  const { error } = await state.supabase.from('cargo_shipments').update({ status }).eq(key, shipment[key]);
+  const key = shipment.id ? 'id' : (Object.prototype.hasOwnProperty.call(shipment, 'MAWB') ? 'MAWB' : 'mawb');
+  const statusKey = Object.prototype.hasOwnProperty.call(shipment, 'Status') ? 'Status' : 'status';
+  const { error } = await state.supabase.from('cargo_shipments').update({ [statusKey]: status }).eq(key, shipment[key]);
   if (error) {
-    showMessage(`Gagal update status: ${error.message}`, 'error');
+    showMessage(`Gagal update status: ${formatSupabaseError(error)}`, 'error');
     render();
     return;
   }
-  shipment.status = status;
-  showMessage(`Status MAWB ${shipment.mawb} diubah ke ${status}.`);
+  shipment[statusKey] = status;
+  showMessage(`Status MAWB ${getField(shipment, 'mawb')} diubah ke ${status}.`);
   render();
 }
 
@@ -288,33 +353,33 @@ function calculateTotals() {
 function formPayload() {
   const formData = new FormData(elements.form);
   const { totalRevenue, totalCost } = calculateTotals();
-  return {
-    airline: formData.get('airline'),
-    booking_date: formData.get('booking_date'),
-    status: formData.get('status'),
-    mawb: formData.get('mawb'),
-    agent_name: formData.get('agent_name'),
-    gate: formData.get('gate'),
-    dest: formData.get('dest'),
-    chargeable_weight: Number(formData.get('chargeable_weight') || 0),
-    selling_rate: Number(formData.get('selling_rate') || 0),
-    interline_rate: Number(formData.get('interline_rate') || 0),
-    second_leg_rate_cost: Number(formData.get('second_leg_rate_cost') || 0),
-    total_revenue: totalRevenue,
-    total_cost: totalCost,
-    leg1_routing: formData.get('leg1_routing'),
-    leg1_flight_number: formData.get('leg1_flight_number'),
-    leg1_etd: formData.get('leg1_etd') || null,
-    leg2_routing: formData.get('leg2_routing'),
-    leg2_flight_number: formData.get('leg2_flight_number'),
-    leg2_etd: formData.get('leg2_etd') || null,
-    leg3_routing: formData.get('leg3_routing'),
-    leg3_flight_number: formData.get('leg3_flight_number'),
-    leg3_etd: formData.get('leg3_etd') || null,
-    last_leg_routing: formData.get('last_leg_routing'),
-    last_leg_flight_number: formData.get('last_leg_flight_number'),
-    last_leg_etd: formData.get('last_leg_etd') || null,
-  };
+  const payload = {};
+  setField(payload, 'airline', formData.get('airline'));
+  setField(payload, 'booking_date', formData.get('booking_date'));
+  setField(payload, 'status', formData.get('status'));
+  setField(payload, 'mawb', formData.get('mawb'));
+  setField(payload, 'agent_name', formData.get('agent_name'));
+  setField(payload, 'gate', formData.get('gate'));
+  setField(payload, 'dest', formData.get('dest'));
+  setField(payload, 'chargeable_weight', Number(formData.get('chargeable_weight') || 0));
+  setField(payload, 'selling_rate', Number(formData.get('selling_rate') || 0));
+  setField(payload, 'interline_rate', Number(formData.get('interline_rate') || 0));
+  setField(payload, 'second_leg_rate_cost', Number(formData.get('second_leg_rate_cost') || 0));
+  setField(payload, 'total_revenue', totalRevenue);
+  setField(payload, 'total_cost', totalCost);
+  setField(payload, 'leg1_routing', formData.get('leg1_routing'));
+  setField(payload, 'leg1_flight_number', formData.get('leg1_flight_number'));
+  setField(payload, 'leg1_etd', formData.get('leg1_etd') || null);
+  setField(payload, 'leg2_routing', formData.get('leg2_routing'));
+  setField(payload, 'leg2_flight_number', formData.get('leg2_flight_number'));
+  setField(payload, 'leg2_etd', formData.get('leg2_etd') || null);
+  setField(payload, 'leg3_routing', formData.get('leg3_routing'));
+  setField(payload, 'leg3_flight_number', formData.get('leg3_flight_number'));
+  setField(payload, 'leg3_etd', formData.get('leg3_etd') || null);
+  setField(payload, 'last_leg_routing', formData.get('last_leg_routing'));
+  setField(payload, 'last_leg_flight_number', formData.get('last_leg_flight_number'));
+  setField(payload, 'last_leg_etd', formData.get('last_leg_etd') || null);
+  return payload;
 }
 
 async function handleSubmit(event) {
@@ -326,14 +391,14 @@ async function handleSubmit(event) {
   const payload = formPayload();
   const { data, error } = await state.supabase.from('cargo_shipments').insert(payload).select().single();
   if (error) {
-    showMessage(`Gagal menyimpan booking: ${error.message}`, 'error');
+    showMessage(`Gagal menyimpan booking: ${formatSupabaseError(error)}`, 'error');
     return;
   }
   state.shipments.unshift(data);
-  state.agents = [...new Set([...state.agents, data.agent_name].filter(Boolean))].sort();
+  state.agents = [...new Set([...state.agents, getField(data, 'agent_name')].filter(Boolean))].sort();
   renderAgentSuggestions();
   closeModal();
-  showMessage(`Booking ${data.mawb} berhasil dibuat.`);
+  showMessage(`Booking ${getField(data, 'mawb')} berhasil dibuat.`);
   render();
 }
 
